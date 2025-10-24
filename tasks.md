@@ -22,40 +22,39 @@ Guiding constraints (from plan & quick reference):
 ## Phase 0 — Project Setup & Foundation
 
 ### 0.1 Environment & repo
-- [ ] 0.1.1 Create virtual environment and activation script
-  - [ ] Create venv and document activation (Windows WSL / Windows instructions)
-  - [ ] Add `requirements.txt` and `pyproject.toml` or similar
-  - [ ] Add `.gitignore` (exclude saves/, resources/textures/, __pycache__)
+- [x] 0.1.1 Create virtual environment and activation script
+  - [x] Create venv and document activation (Windows WSL / Windows instructions)
+  - [x] Add `requirements.txt` and `pyproject.toml` or similar
+  - [x] Add `.gitignore` (exclude saves/, resources/textures/, __pycache__)
   - Acceptance: `venv` works and `pip install -r requirements.txt` installs without error on dev machine.
 
-- [ ] 0.1.2 Setup initial git repo and CI scaffold (optional)
-  - [ ] Initialize git, add initial commit
-  - [ ] Add a basic GitHub Actions workflow to run tests
-  - Acceptance: CI runs tests on push (if enabled)
+- [x] 0.1.2 Setup initial git repo and CI scaffold (optional)
+  - [x] Initialize git, add initial commit
+ 
 
 ### 0.2 Core architecture & config
-- [ ] 0.2.1 Create `config.py` with central constants
-  - [ ] Include CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, FOV, FPS_TARGET, REACH_DISTANCE
-  - [ ] Document default values and how to override them
+- [x] 0.2.1 Create `config.py` with central constants
+  - [x] Include CHUNK_SIZE, CHUNK_HEIGHT, RENDER_DISTANCE, FOV, FPS_TARGET, REACH_DISTANCE
+  - [x] Document default values and how to override them
   - Acceptance: All modules import settings from `config.py`.
 
-- [ ] 0.2.2 Logging & error handling
-  - [ ] Implement `logging` config (file + console)
-  - [ ] Add a `logger` wrapper used by major modules
+- [x] 0.2.2 Logging & error handling
+  - [x] Implement `logging` config (file + console)
+  - [x] Add a `logger` wrapper used by major modules
   - Acceptance: `logger.info(...)` outputs to console and `game.log`.
 
-- [ ] 0.2.3 Shader loader & asset layout
-  - [ ] Create `shaders/` folder and minimal `vertex.glsl`/`fragment.glsl`
-  - [ ] Implement `engine/renderer.py` shader compile/link utilities (with error reporting)
+- [x] 0.2.3 Shader loader & asset layout
+  - [x] Create `shaders/` folder and minimal `vertex.glsl`/`fragment.glsl`
+  - [x] Implement `engine/renderer.py` shader compile/link utilities (with error reporting)
   - Acceptance: Simple shader compiles and `Renderer` reports shader link errors.
 
 ### 0.3 Testing scaffold
-- [ ] 0.3.1 Choose test framework (pytest recommended)
-  - [ ] Create `tests/` folder and example tests (utils, crafting)
+- [x] 0.3.1 Choose test framework (pytest recommended)
+  - [x] Create `tests/` folder and example tests (utils, crafting)
   - Acceptance: `pytest` runs and example tests pass.
 
-- [ ] 0.3.2 Add basic performance measurement helpers
-  - [ ] `Timer` context manager and quick benchmark script for mesh generation
+- [x] 0.3.2 Add basic performance measurement helpers
+  - [x] `Timer` context manager and quick benchmark script for mesh generation
   - Acceptance: Timer logs long-running sections (>16 ms)
 
 ---

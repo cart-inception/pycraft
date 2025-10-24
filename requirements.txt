@@ -1,0 +1,19 @@
+# Core dependencies for Minecraft clone
+pygame>=2.1.0
+PyOpenGL>=3.1.6
+PyOpenGL-accelerate>=3.1.6
+numpy>=1.21.0
+Pillow>=8.3.0
+noise>=1.2.2
+
+# Development dependencies
+pytest>=6.2.0
+pytest-cov>=2.12.0
+
+# Optional performance dependencies
+# cython>=0.29.0  # Uncomment if needed for performance optimizations
+# numba>=0.54.0   # Uncomment if needed for JIT compilation
+
+# Build system dependencies
+setuptools>=60.0.0
+wheel>=0.37.0
