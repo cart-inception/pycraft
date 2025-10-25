@@ -9,13 +9,12 @@ import os
 
 from OpenGL.GL import (
     GL_VERTEX_SHADER, GL_FRAGMENT_SHADER, GL_COMPILE_STATUS,
-    GL_LINK_STATUS, GL_TRUE, glCreateShader, glShaderSource,
+    GL_LINK_STATUS, GL_TRUE, GL_FALSE, glCreateShader, glShaderSource,
     glCompileShader, glGetShaderiv, glGetShaderInfoLog,
     glCreateProgram, glAttachShader, glLinkProgram,
     glGetProgramiv, glGetProgramInfoLog, glDeleteShader,
     glDeleteProgram, glUseProgram, glGetUniformLocation, glUniform1i,
-    glUniform1f, glUniform3f, glUniformMatrix4fv,
-    GL_FALSE
+    glUniform1f, glUniform3f, glUniformMatrix4fv
 )
 import numpy as np
 

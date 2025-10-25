@@ -10,6 +10,7 @@ import math
 from typing import Optional
 
 import pygame
+import numpy as np
 from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
@@ -17,6 +18,8 @@ from OpenGL.GLU import *
 from config import config, logger
 from engine.shader import shader_manager
 from engine.utils import Timer, create_perspective_matrix, check_opengl_errors
+from engine.renderer import Renderer
+from engine.camera import Camera
 
 class Game:
     """Main game class"""
@@ -29,8 +32,10 @@ class Game:
         self.delta_time: float = 0.0
         self.fps: float = 0.0
 
-        # Test shader for basic rendering
+        # Core systems
         self.test_shader = None
+        self.renderer = None
+        self.camera = None
 
         logger.info("Initializing Pycraft...")
 
@@ -139,6 +144,18 @@ class Game:
             logger.error(f"Failed to load test shader: {e}")
             raise
 
+        # Initialize renderer
+        self.renderer = Renderer()
+        self.renderer.create_cube_mesh(size=2.0, name="test_cube")
+        self.renderer.create_colored_texture(64, 64, (255, 255, 255), "test_texture")
+        logger.info("Renderer initialized successfully")
+
+        # Initialize camera
+        self.camera = Camera()
+        self.camera.set_position(0.0, 0.0, 5.0)
+        self.camera.toggle_mouse_capture()  # Start with mouse captured
+        logger.info("Camera initialized successfully")
+
     def run(self):
         """Main game loop"""
         if not self.initialize():
@@ -184,12 +201,25 @@ class Game:
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    self.running = False
+                    # Camera handles its own ESC key for mouse toggle
+                    if self.camera:
+                        self.camera.handle_key_event(event)
+                    else:
+                        self.running = False
                 elif event.key == pygame.K_F11:
                     self._toggle_fullscreen()
                 elif event.key == pygame.K_F3:
                     config.DEBUG_MODE = not config.DEBUG_MODE
                     logger.info(f"Debug mode: {'ON' if config.DEBUG_MODE else 'OFF'}")
+                else:
+                    # Pass other key events to camera
+                    if self.camera:
+                        self.camera.handle_key_event(event)
+
+            elif event.type == pygame.KEYUP:
+                # Pass key up events to camera
+                if self.camera:
+                    self.camera.handle_key_event(event)
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left click
@@ -200,15 +230,15 @@ class Game:
                     pass
 
             elif event.type == pygame.MOUSEMOTION:
-                if config.MOUSE_LOCK:
-                    # Will be used for camera rotation
-                    pass
+                # Pass mouse motion to camera
+                if self.camera:
+                    self.camera.handle_mouse_event(event)
 
     def _update(self):
         """Update game logic"""
-        # Placeholder for game logic updates
-        # This will include player movement, physics, world updates, etc.
-        pass
+        # Update camera movement
+        if self.camera:
+            self.camera.update(self.delta_time)
 
     def _render(self):
         """Render the game"""
@@ -216,17 +246,21 @@ class Game:
             # Clear screen
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
-            # Render test shader (just clears screen for now)
-            if self.test_shader:
+            # Use test shader and set uniforms
+            if self.test_shader and self.camera and self.renderer:
                 self.test_shader.use()
-                # Set basic uniforms
-                projection = create_perspective_matrix(
-                    math.radians(config.FOV),
-                    config.WINDOW_WIDTH / config.WINDOW_HEIGHT,
-                    config.NEAR_PLANE,
-                    config.FAR_PLANE
-                )
-                self.test_shader.set_matrix4("uProjection", projection)
+
+                # Set camera matrices
+                aspect_ratio = config.WINDOW_WIDTH / config.WINDOW_HEIGHT
+                projection_matrix = self.camera.get_projection_matrix(aspect_ratio)
+                view_matrix = self.camera.get_view_matrix()
+
+                self.test_shader.set_matrix4("uProjection", projection_matrix)
+                self.test_shader.set_matrix4("uView", view_matrix)
+                self.test_shader.set_matrix4("uModel", np.eye(4))  # Identity matrix for world origin
+
+                # Render the test cube
+                self.renderer.render_mesh("test_cube", "test_texture")
 
             # Render debug info if enabled
             if config.DEBUG_MODE:
@@ -240,9 +274,17 @@ class Game:
 
     def _render_debug_info(self):
         """Render debug information overlay"""
-        # This would render FPS, position, etc. using pygame drawing
-        # For now, we'll just update the window title
-        debug_info = f"Pycraft - FPS: {self.fps:.1f} | DEBUG MODE"
+        # Update window title with debug info
+        if self.camera:
+            pos = self.camera.get_position()
+            rot = self.camera.get_rotation()
+            debug_info = (f"Pycraft - FPS: {self.fps:.1f} | "
+                         f"Pos: ({pos[0]:.1f}, {pos[1]:.1f}, {pos[2]:.1f}) | "
+                         f"Rot: ({rot[0]:.1f}°, {rot[1]:.1f}°) | "
+                         f"Mouse: {'CAPTURED' if self.camera.mouse_captured else 'FREE'}")
+        else:
+            debug_info = f"Pycraft - FPS: {self.fps:.1f} | DEBUG MODE"
+
         pygame.display.set_caption(debug_info)
 
     def _toggle_fullscreen(self):
@@ -266,6 +308,10 @@ class Game:
     def _cleanup(self):
         """Clean up resources"""
         logger.info("Cleaning up...")
+
+        # Cleanup renderer
+        if self.renderer:
+            self.renderer.cleanup()
 
         # Cleanup shaders
         shader_manager.cleanup()

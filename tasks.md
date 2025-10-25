@@ -62,25 +62,25 @@ Guiding constraints (from plan & quick reference):
 ## Phase 1 — Core Engine (Rendering, Chunks, World)
 
 ### 1.1 Basic 3D rendering & camera
-- [ ] 1.1.1 Create Pygame window with OpenGL context (OpenGL 3.3 core)
-  - [ ] Ensure proper GL context flags for modern profile
-  - [ ] Add robust GL version check and fallback/logging
+- [x] 1.1.1 Create Pygame window with OpenGL context (OpenGL 3.3 core)
+  - [x] Ensure proper GL context flags for modern profile
+  - [x] Add robust GL version check and fallback/logging
   - Acceptance: Program opens window and prints GL version >= 3.3 or logs a clear error.
 
-- [ ] 1.1.2 Implement `engine/shader.py` helper class
-  - [ ] Read shader sources, compile, link, and validate uniforms
-  - [ ] Provide `use()`, `set_uniform_matrix()` helpers
+- [x] 1.1.2 Implement `engine/shader.py` helper class
+  - [x] Read shader sources, compile, link, and validate uniforms
+  - [x] Provide `use()`, `set_uniform_matrix()` helpers
   - Acceptance: Vertex and fragment shader compile successfully for the simple textured cube example.
 
-- [ ] 1.1.3 Implement `engine/renderer.py` minimal rendering pipeline
-  - [ ] VAO/VBO creation utilities
-  - [ ] Texture upload + atlas support (GL_NEAREST, padding)
-  - [ ] Mesh draw function (bind VAO, glDrawElements / glDrawArrays)
+- [x] 1.1.3 Implement `engine/renderer.py` minimal rendering pipeline
+  - [x] VAO/VBO creation utilities
+  - [x] Texture upload + atlas support (GL_NEAREST, padding)
+  - [x] Mesh draw function (bind VAO, glDrawElements / glDrawArrays)
   - Acceptance: A single colored cube renders using VBO/VAO and a shader program.
 
-- [ ] 1.1.4 Create `engine/camera.py` with FPS-style control
-  - [ ] Mouse look, WASD movement, ESC to release mouse
-  - [ ] Provide view and projection matrices
+- [x] 1.1.4 Create `engine/camera.py` with FPS-style control
+  - [x] Mouse look, WASD movement, ESC to release mouse
+  - [x] Provide view and projection matrices
   - Acceptance: Camera can move and look around; crosshair+movement test OK.
 
 ### 1.2 Chunk data & mesh building
