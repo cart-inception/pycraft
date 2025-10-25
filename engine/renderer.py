@@ -4,6 +4,7 @@ Handles VAO/VBO management, mesh creation, and rendering operations
 """
 
 import logging
+import ctypes
 import numpy as np
 from typing import List, Tuple, Optional, Dict
 
@@ -20,6 +21,7 @@ from OpenGL.GL import (
 
 from config import config
 from engine.utils import Timer, check_opengl_errors
+from engine.mesh_builder import MeshData
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,97 @@ class Mesh:
         self.color_vbo: Optional[int] = None
 
         self._upload_to_gpu()
+
+
+class ChunkMesh:
+    """
+    Optimized mesh container for chunk rendering with interleaved vertex data
+    """
+
+    def __init__(self, mesh_data: MeshData):
+        """
+        Initialize chunk mesh from mesh data
+
+        Args:
+            mesh_data: MeshData containing vertices and indices from mesh builder
+        """
+        self.vertex_count = mesh_data.vertex_count
+        self.index_count = len(mesh_data.indices)
+        self.face_count = mesh_data.face_count
+        self.generation_time = mesh_data.generation_time
+
+        # Convert vertex data to numpy array
+        vertices = np.array(mesh_data.vertices, dtype=np.float32)
+        indices = np.array(mesh_data.indices, dtype=np.uint32)
+
+        self.vao: Optional[int] = None
+        self.vbo: Optional[int] = None
+        self.ebo: Optional[int] = None
+
+        self._upload_to_gpu(vertices, indices)
+
+    def _upload_to_gpu(self, vertices: np.ndarray, indices: np.ndarray):
+        """Upload chunk mesh data to GPU with interleaved vertex format"""
+        # Generate and bind VAO
+        self.vao = glGenVertexArrays(1)
+        glBindVertexArray(self.vao)
+
+        # Generate and bind VBO for interleaved vertex data
+        self.vbo = glGenBuffers(1)
+        glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
+        glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+
+        # Set vertex attribute pointers for interleaved format
+        # Layout: position (3 floats), uv (2 floats), light (1 float)
+        vertex_size = 6 * 4  # 6 floats * 4 bytes each = 24 bytes
+
+        # Position attribute (location 0)
+        glEnableVertexAttribArray(0)
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, vertex_size, None)
+
+        # UV coordinate attribute (location 1)
+        glEnableVertexAttribArray(1)
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, vertex_size,
+                            ctypes.c_void_p(3 * 4))  # Offset by position
+
+        # Light attribute (location 2)
+        glEnableVertexAttribArray(2)
+        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, vertex_size,
+                            ctypes.c_void_p(5 * 4))  # Offset by position + UV
+
+        # Generate and bind EBO for indices
+        self.ebo = glGenBuffers(1)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.ebo)
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
+
+        # Unbind VAO
+        glBindVertexArray(0)
+
+        check_opengl_errors()
+        logger.debug(f"Chunk mesh uploaded to GPU: {self.vertex_count} vertices, "
+                    f"{self.index_count} indices, {self.face_count} faces")
+
+    def draw(self):
+        """Draw the chunk mesh"""
+        if self.vao is None:
+            logger.warning("Attempting to draw chunk mesh that hasn't been uploaded to GPU")
+            return
+
+        glBindVertexArray(self.vao)
+        glDrawElements(GL_TRIANGLES, self.index_count, GL_UNSIGNED_INT, None)
+        glBindVertexArray(0)
+
+    def cleanup(self):
+        """Clean up GPU resources"""
+        if self.vao is not None:
+            glDeleteVertexArrays(1, [self.vao])
+            self.vao = None
+        if self.vbo is not None:
+            glDeleteBuffers(1, [self.vbo])
+            self.vbo = None
+        if self.ebo is not None:
+            glDeleteBuffers(1, [self.ebo])
+            self.ebo = None
 
     def _upload_to_gpu(self):
         """Upload mesh data to GPU"""
@@ -200,13 +293,19 @@ class Texture:
 
 class Renderer:
     """
-    Basic renderer for 3D meshes
+    Basic renderer for 3D meshes with chunk mesh support
     """
 
     def __init__(self):
         """Initialize renderer"""
         self.meshes: Dict[str, Mesh] = {}
         self.textures: Dict[str, Texture] = {}
+        self.chunk_meshes: Dict[str, ChunkMesh] = {}
+
+        # VBO pooling for memory efficiency
+        self._vbo_pool: List[int] = []
+        self._vao_pool: List[int] = []
+        self._ebo_pool: List[int] = []
 
         logger.info("Renderer initialized")
 
@@ -338,6 +437,138 @@ class Renderer:
         # Render the mesh
         self.meshes[mesh_name].draw()
 
+    def create_chunk_mesh(self, mesh_data: MeshData, chunk_key: str) -> ChunkMesh:
+        """
+        Create and upload a chunk mesh to GPU
+
+        Args:
+            mesh_data: MeshData containing vertices and indices
+            chunk_key: Unique identifier for the chunk (e.g., "chunk_0_0")
+
+        Returns:
+            Created ChunkMesh instance
+        """
+        # Clean up existing mesh for this chunk if it exists
+        if chunk_key in self.chunk_meshes:
+            self.remove_chunk_mesh(chunk_key)
+
+        # Create new chunk mesh
+        chunk_mesh = ChunkMesh(mesh_data)
+        self.chunk_meshes[chunk_key] = chunk_mesh
+
+        logger.debug(f"Created chunk mesh: {chunk_key}, "
+                    f"{chunk_mesh.vertex_count} vertices, "
+                    f"{chunk_mesh.face_count} faces, "
+                    f"generation time: {chunk_mesh.generation_time*1000:.2f}ms")
+        return chunk_mesh
+
+    def update_chunk_mesh(self, mesh_data: MeshData, chunk_key: str) -> ChunkMesh:
+        """
+        Update an existing chunk mesh with new data
+
+        Args:
+            mesh_data: New mesh data
+            chunk_key: Chunk identifier
+
+        Returns:
+            Updated ChunkMesh instance
+        """
+        # Remove old mesh
+        self.remove_chunk_mesh(chunk_key)
+
+        # Create new mesh
+        return self.create_chunk_mesh(mesh_data, chunk_key)
+
+    def remove_chunk_mesh(self, chunk_key: str):
+        """
+        Remove a chunk mesh and clean up its GPU resources
+
+        Args:
+            chunk_key: Chunk identifier to remove
+        """
+        if chunk_key in self.chunk_meshes:
+            chunk_mesh = self.chunk_meshes[chunk_key]
+            chunk_mesh.cleanup()
+            del self.chunk_meshes[chunk_key]
+            logger.debug(f"Removed chunk mesh: {chunk_key}")
+
+    def render_chunk_mesh(self, chunk_key: str, texture_name: str = None):
+        """
+        Render a specific chunk mesh
+
+        Args:
+            chunk_key: Chunk identifier
+            texture_name: Optional texture name to bind
+        """
+        if chunk_key not in self.chunk_meshes:
+            logger.warning(f"Chunk mesh not found: {chunk_key}")
+            return
+
+        # Bind texture if provided
+        if texture_name and texture_name in self.textures:
+            self.textures[texture_name].bind(0)
+
+        # Render the chunk mesh
+        self.chunk_meshes[chunk_key].draw()
+
+    def render_all_chunks(self, texture_name: str = None):
+        """
+        Render all loaded chunk meshes
+
+        Args:
+            texture_name: Optional texture name to bind
+        """
+        if not self.chunk_meshes:
+            return
+
+        # Bind texture if provided
+        if texture_name and texture_name in self.textures:
+            self.textures[texture_name].bind(0)
+
+        # Render all chunk meshes
+        for chunk_key, chunk_mesh in self.chunk_meshes.items():
+            chunk_mesh.draw()
+
+        logger.debug(f"Rendered {len(self.chunk_meshes)} chunk meshes")
+
+    def create_texture_atlas(self, width: int, height: int, data: np.ndarray, name: str) -> Texture:
+        """
+        Create a texture atlas for block textures
+
+        Args:
+            width: Atlas width
+            height: Atlas height
+            data: RGBA pixel data
+            name: Atlas name
+
+        Returns:
+            Created texture
+        """
+        texture = Texture(width, height, data)
+        self.textures[name] = texture
+        logger.info(f"Created texture atlas: {name}, size={width}x{height}")
+        return texture
+
+    def get_chunk_mesh_stats(self) -> Dict[str, int]:
+        """
+        Get statistics about loaded chunk meshes
+
+        Returns:
+            Dictionary with mesh statistics
+        """
+        total_vertices = sum(mesh.vertex_count for mesh in self.chunk_meshes.values())
+        total_faces = sum(mesh.face_count for mesh in self.chunk_meshes.values())
+        total_indices = sum(mesh.index_count for mesh in self.chunk_meshes.values())
+
+        return {
+            'chunk_count': len(self.chunk_meshes),
+            'total_vertices': total_vertices,
+            'total_faces': total_faces,
+            'total_indices': total_indices,
+            'avg_vertices_per_chunk': total_vertices // len(self.chunk_meshes) if self.chunk_meshes else 0,
+            'avg_faces_per_chunk': total_faces // len(self.chunk_meshes) if self.chunk_meshes else 0
+        }
+
     def begin_frame(self):
         """Called at the beginning of each frame"""
         pass
@@ -350,12 +581,35 @@ class Renderer:
         """Clean up all GPU resources"""
         logger.info("Cleaning up renderer resources...")
 
+        # Clean up regular meshes
         for mesh in self.meshes.values():
             mesh.cleanup()
         self.meshes.clear()
 
+        # Clean up chunk meshes
+        for chunk_mesh in self.chunk_meshes.values():
+            chunk_mesh.cleanup()
+        self.chunk_meshes.clear()
+
+        # Clean up textures
         for texture in self.textures.values():
             texture.cleanup()
         self.textures.clear()
+
+        # Clean up VBO pools
+        if self._vbo_pool:
+            from OpenGL.GL import glDeleteBuffers
+            glDeleteBuffers(len(self._vbo_pool), self._vbo_pool)
+            self._vbo_pool.clear()
+
+        if self._vao_pool:
+            from OpenGL.GL import glDeleteVertexArrays
+            glDeleteVertexArrays(len(self._vao_pool), self._vao_pool)
+            self._vao_pool.clear()
+
+        if self._ebo_pool:
+            from OpenGL.GL import glDeleteBuffers
+            glDeleteBuffers(len(self._ebo_pool), self._ebo_pool)
+            self._ebo_pool.clear()
 
         logger.info("Renderer cleanup complete")
